@@ -1,0 +1,91 @@
+# Snakefile — gerado automaticamente pelo notebook
+# Uso no terminal: cd workflow && snakemake --cores 8
+
+SPECIES = {
+    "D_salina":   "data/proteins/D_salina_protein.fa",
+    "N_gaditana": "data/proteins/N_gaditana_protein.faa",
+}
+
+rule all:
+    input:
+        expand("results/kofamscan/{sp}_kofam.tsv",    sp=SPECIES),
+        expand("results/diamond/{sp}_diamond_hits.tsv", sp=SPECIES),
+
+# ── Rule 1: Download KOfam database ─────────────────────────────────
+rule download_kofam_db:
+    output:
+        profiles = directory("resources/kofam/profiles"),
+        ko_list  = "resources/kofam/ko_list"
+    shell:
+        """
+        mkdir -p resources/kofam && cd resources/kofam
+        if [ ! -f ko_list ]; then
+            wget -q ftp://ftp.genome.jp/pub/db/kofam/ko_list.gz && gunzip ko_list.gz
+        fi
+        if [ ! -d profiles ]; then
+            wget -q ftp://ftp.genome.jp/pub/db/kofam/profiles.tar.gz
+            tar -xzf profiles.tar.gz && rm profiles.tar.gz
+        fi
+        """
+
+# ── Rule 2: KofamScan — KO assignment ───────────────────────────────
+rule kofamscan:
+    input:
+        faa      = lambda wc: SPECIES[wc.sp],
+        profiles = "resources/kofam/profiles",
+        ko_list  = "resources/kofam/ko_list"
+    output:
+        tsv = "results/kofamscan/{sp}_kofam.tsv"
+    threads: 8
+    shell:
+        """
+        exec_annotation \
+            --profile {input.profiles} \
+            --ko-list  {input.ko_list} \
+            --cpu      {threads} \
+            --format   detail-tsv \
+            -o         {output.tsv} \
+            {input.faa}
+        """
+
+# ── Rule 3: Download Swiss-Prot + build DIAMOND database ────────────
+rule download_swissprot:
+    output:
+        faa = "resources/swissprot/uniprot_sprot.fasta",
+        db  = "resources/swissprot/swissprot.dmnd"
+    threads: 8
+    shell:
+        """
+        mkdir -p resources/swissprot
+        if [ ! -f resources/swissprot/uniprot_sprot.fasta ]; then
+            wget -q -O resources/swissprot/uniprot_sprot.fasta.gz \
+                https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz
+            gunzip -f resources/swissprot/uniprot_sprot.fasta.gz
+        fi
+        diamond makedb \
+            --in      resources/swissprot/uniprot_sprot.fasta \
+            --db      resources/swissprot/swissprot.dmnd \
+            --threads {threads}
+        """
+
+# ── Rule 4: DIAMOND blastp vs Swiss-Prot ────────────────────────────
+rule diamond_blastp:
+    input:
+        faa = lambda wc: SPECIES[wc.sp],
+        db  = "resources/swissprot/swissprot.dmnd"
+    output:
+        tsv = "results/diamond/{sp}_diamond_hits.tsv"
+    threads: 8
+    shell:
+        """
+        mkdir -p results/diamond
+        diamond blastp \
+            --db             {input.db} \
+            --query          {input.faa} \
+            --out            {output.tsv} \
+            --outfmt 6 qseqid sseqid pident length evalue bitscore stitle qcovhsp \
+            --sensitive \
+            --evalue         1e-5 \
+            --max-target-seqs 5 \
+            --threads        {threads}
+        """
