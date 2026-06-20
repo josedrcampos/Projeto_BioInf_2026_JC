@@ -143,9 +143,9 @@ Then run *Kernel → Restart & Run All*. All outputs are written to `results/`.
 
 ---
 
-## The Article
+## Article 1
 
-The final article is written in the **Springer Lecture Notes in Computer Science (LLNCS)** format. The LaTeX source compiles in Overleaf without modification (the `llncs.cls` class is bundled there). To compile locally, ensure the LLNCS class is installed and place the figures in `article/latex/figures/`.
+This paper presents a DBTL-based bioinformatics pipeline for comparative metabolic pathway annotation in microalgae. Using Dunaliella salina and Nannochloropsis gaditana as case studies, it identifies shared and species-specific metabolic functions while providing a reproducible framework for cross-species metabolic analysis.
 
 ---
 
